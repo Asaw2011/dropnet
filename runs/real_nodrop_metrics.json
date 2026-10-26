@@ -1,0 +1,95 @@
+{
+ "per_video": {
+  "12041905.mp4": {
+   "windows": 42,
+   "went_in": 0.0,
+   "missed": 0.0,
+   "no_drop": 1.0
+  },
+  "12271148.mp4": {
+   "windows": 50,
+   "went_in": 0.0,
+   "missed": 0.02,
+   "no_drop": 0.98
+  },
+  "18622568.mp4": {
+   "windows": 147,
+   "went_in": 0.0,
+   "missed": 0.0,
+   "no_drop": 1.0
+  },
+  "20042306.mp4": {
+   "windows": 49,
+   "went_in": 0.0,
+   "missed": 0.0,
+   "no_drop": 1.0
+  },
+  "30643794.mp4": {
+   "windows": 104,
+   "went_in": 0.0,
+   "missed": 0.0,
+   "no_drop": 1.0
+  },
+  "36079579.mp4": {
+   "windows": 272,
+   "went_in": 0.0,
+   "missed": 0.0,
+   "no_drop": 1.0
+  },
+  "5944680.mp4": {
+   "windows": 47,
+   "went_in": 0.0,
+   "missed": 0.0,
+   "no_drop": 1.0
+  },
+  "5995137.mp4": {
+   "windows": 152,
+   "went_in": 0.0,
+   "missed": 0.0,
+   "no_drop": 1.0
+  },
+  "7298045.mp4": {
+   "windows": 89,
+   "went_in": 0.0,
+   "missed": 0.0,
+   "no_drop": 1.0
+  },
+  "7298092.mp4": {
+   "windows": 101,
+   "went_in": 0.0,
+   "missed": 0.1188118811881188,
+   "no_drop": 0.8811881188118812
+  },
+  "7298096.mp4": {
+   "windows": 149,
+   "went_in": 0.013422818791946308,
+   "missed": 0.006711409395973154,
+   "no_drop": 0.9798657718120806
+  },
+  "7299471.mp4": {
+   "windows": 77,
+   "went_in": 0.0,
+   "missed": 0.0,
+   "no_drop": 1.0
+  },
+  "7299501.mp4": {
+   "windows": 67,
+   "went_in": 0.0,
+   "missed": 0.0,
+   "no_drop": 1.0
+  },
+  "7580478.mp4": {
+   "windows": 65,
+   "went_in": 0.0,
+   "missed": 0.0,
+   "no_drop": 1.0
+  }
+ },
+ "summary": {
+  "windows": 1411,
+  "frac_went_in": 0.001417434443656981,
+  "frac_missed": 0.009922041105598866,
+  "frac_no_drop": 0.9886605244507441,
+  "note": "real footage, no drop in any window, so frac_went_in = false credit rate"
+ }
+}

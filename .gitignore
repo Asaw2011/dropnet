@@ -1,0 +1,6 @@
+.venv/
+data/raw/
+data/eyes/
+data/collected/
+runs/*.pt
+__pycache__/

@@ -1,0 +1,25 @@
+{
+ "acc3": 0.9913333333333333,
+ "acc_binary": 0.9943333333333333,
+ "sensitivity_went_in": 0.9903753609239654,
+ "specificity_not_in": 0.9964303926568078,
+ "false_credit_on_miss": 0.0070921985815602835,
+ "confusion_rows_true_cols_pred": [
+  [
+   1029,
+   10,
+   0
+  ],
+  [
+   7,
+   971,
+   9
+  ],
+  [
+   0,
+   0,
+   974
+  ]
+ ],
+ "note": "synthetic clips on held-out faces, NOT real drops"
+}
