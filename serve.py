@@ -1,4 +1,4 @@
-"""Drop classifier server. The Pi posts a clip, gets back went_in / missed / no_drop.
+"""Drop classifier server. The Pi posts a clip, gets back drop_detected / drop_not_detected.
 
   python serve.py --port 8800 [--forward http://localhost:4321]
 
@@ -7,7 +7,8 @@ POST /label      {"clip_id", "label"}  saves the true label so real clips can re
 GET  /health
 
 Every clip gets saved to data/collected/ so we build the real dataset as we go.
---forward sends the verdict to the companion app as a /api/drop scenario.
+--forward tells the companion app when a drop is detected. not detected isn't sent, the
+app already flags a dose that never gets confirmed.
 """
 import argparse
 import io
@@ -20,14 +21,13 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import numpy as np
 import onnxruntime as ort
 
-from synth import H, LABELS, T, W
+from synth import H, T, W
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 SAVE = f"{ROOT}/data/collected"
-# app scenarios from src/sim/cap.js
-TO_APP = {"went_in": "good", "missed": "missed_cheek", "no_drop": "false_trigger"}
-# below this the verdict is "unsure" and the app should not give credit
-MIN_CONF = 0.7
+OUTPUTS = ["drop_detected", "drop_not_detected"]
+# only call it detected when the model is pretty sure, a wrong credit is the bad mistake
+MIN_DETECT = 0.7
 
 
 class Classifier:
@@ -36,10 +36,8 @@ class Classifier:
 
     def __call__(self, clip):
         x = clip.transpose(0, 3, 1, 2)[None].astype(np.float32)
-        z = self.sess.run(None, {"clip": x})[0][0]
-        p = np.exp(z - z.max())
-        p /= p.sum()
-        return {l: float(v) for l, v in zip(LABELS, p)}
+        p = self.sess.run(None, {"clip": x})[0][0]
+        return {l: float(v) for l, v in zip(OUTPUTS, p)}
 
 
 def make_handler(clf, forward):
@@ -68,18 +66,16 @@ def make_handler(clf, forward):
                 if clip.shape != (T, H, W, 3):
                     return self._json(400, {"error": f"expected {(T, H, W, 3)}, got {list(clip.shape)}"})
                 probs = clf(clip)
-                verdict = max(probs, key=probs.get)
-                if probs[verdict] < MIN_CONF:
-                    verdict = "unsure"
+                verdict = "drop_detected" if probs["drop_detected"] >= MIN_DETECT else "drop_not_detected"
                 clip_id = time.strftime("%Y%m%d-%H%M%S") + f"-{int(time.time() * 1000) % 1000:03d}"
                 os.makedirs(SAVE, exist_ok=True)
                 np.savez_compressed(f"{SAVE}/{clip_id}.npz", clip=clip.astype(np.uint8),
                                     probs=json.dumps(probs), verdict=verdict)
                 out = {"verdict": verdict, "probs": probs, "clip_id": clip_id}
-                if forward and verdict != "unsure":
+                if forward and verdict == "drop_detected":
                     try:
                         req = urllib.request.Request(f"{forward}/api/drop", method="POST",
-                                                     data=json.dumps({"scenario": TO_APP[verdict]}).encode(),
+                                                     data=json.dumps({"scenario": "good"}).encode(),
                                                      headers={"Content-Type": "application/json"})
                         urllib.request.urlopen(req, timeout=3).read()
                         out["forwarded"] = True
@@ -88,8 +84,8 @@ def make_handler(clf, forward):
                 return self._json(200, out)
             if self.path == "/label":
                 b = json.loads(raw or b"{}")
-                if b.get("label") not in LABELS or not os.path.exists(f"{SAVE}/{b.get('clip_id')}.npz"):
-                    return self._json(400, {"error": f"need clip_id that exists and label in {LABELS}"})
+                if b.get("label") not in OUTPUTS or not os.path.exists(f"{SAVE}/{b.get('clip_id')}.npz"):
+                    return self._json(400, {"error": f"need clip_id that exists and label in {OUTPUTS}"})
                 with open(f"{SAVE}/labels.jsonl", "a") as f:
                     f.write(json.dumps({"clip_id": b["clip_id"], "label": b["label"], "at": time.time()}) + "\n")
                 return self._json(200, {"ok": True})

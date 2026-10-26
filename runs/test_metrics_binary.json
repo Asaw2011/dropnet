@@ -1,0 +1,8 @@
+{
+ "accuracy": 0.9906666666666667,
+ "detected_when_it_went_in": 0.9759384023099134,
+ "detected_when_it_missed": 0.00303951367781155,
+ "detected_when_nothing_fell": 0.0,
+ "cutoff": 0.7,
+ "note": "synthetic clips on held-out faces, NOT real drops"
+}

@@ -33,3 +33,18 @@ class DropNet(nn.Module):
         f = self.temporal(f)
         f = torch.cat([f.mean(2), f.amax(2)], 1)
         return self.head(f)
+
+
+OUTPUTS = ["drop_detected", "drop_not_detected"]
+
+
+class DetectedHead(nn.Module):
+    """what ships: [p(drop went in), p(it didn't)]. missed + no_drop just get merged"""
+
+    def __init__(self, net):
+        super().__init__()
+        self.net = net
+
+    def forward(self, x):
+        p = self.net(x).softmax(1)
+        return torch.stack([p[:, 0], p[:, 1] + p[:, 2]], 1)

@@ -56,13 +56,11 @@ def make_local(path):
     import onnxruntime as ort
 
     sess = ort.InferenceSession(path, providers=["CPUExecutionProvider"])
-    labels = ["went_in", "missed", "no_drop"]
 
     def run(clip):
-        z = sess.run(None, {"clip": clip.transpose(0, 3, 1, 2)[None].astype(np.float32)})[0][0]
-        p = np.exp(z - z.max())
-        p /= p.sum()
-        return {"verdict": labels[int(p.argmax())], "probs": dict(zip(labels, p.round(3).tolist()))}
+        p = sess.run(None, {"clip": clip.transpose(0, 3, 1, 2)[None].astype(np.float32)})[0][0]
+        verdict = "drop_detected" if p[0] >= 0.7 else "drop_not_detected"  # same cutoff as serve.py
+        return {"verdict": verdict, "p_detected": round(float(p[0]), 3)}
 
     return run
 
