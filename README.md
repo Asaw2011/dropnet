@@ -42,6 +42,16 @@ Testing without a Pi: `python pi/capture.py --webcam 0 --server http://localhost
 - The camera angle, distance, lens, and lighting of the real clip aren't fixed yet. The simulator guesses: one whole eye in view, from a few cm.
 - Real tear film, splash and runoff look different from the simulated ones. A real drop is also much clearer in the eye than in our renders. That gap is the main risk.
 
+## Testing on your own videos
+`test_video.py` runs the model over any video and tells you if it saw a drop go in.
+
+1. Film close, with the eye filling most of the frame, in slow-mo if you can. Use saline or preservative-free artificial tears only.
+2. Name each file by what really happened: `in_1.mov` (went in), `miss_1.mov` (missed), `none_1.mov` (nothing came out).
+3. Run `.venv/bin/python test_video.py ~/Desktop/drops/*.mov`. Add `--crop x,y,w,h` (fractions of the frame) if the eye is small in the shot.
+
+It prints each verdict, says whether it was right, and adds a summary. The line that matters most is "didn't go in, said detected", which should be 0.
+In `runs/video_tests/` you get a marked copy of each video (score on every frame, slowed down) and a strip of the 12 frames it was most sure about.
+
 ## Getting real data (the next step)
 `serve.py` saves every clip it sees to `data/collected/`. Label them with `POST /label {"clip_id", "label": "drop_detected" | "drop_not_detected"}`, then run `finetune_real.py`.
 Suggested first round, all with **preservative-free artificial tears or saline**, an adult volunteer, and an adult supervising:

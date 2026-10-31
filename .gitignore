@@ -4,3 +4,4 @@ data/eyes/
 data/collected/
 runs/*.pt
 __pycache__/
+runs/video_tests/
