@@ -1,0 +1,28 @@
+{
+ "missed": {
+  "n": 987,
+  "dropnet_v1": 0.0,
+  "dropnet": 0.001
+ },
+ "anywhere in the eye": {
+  "n": 319,
+  "dropnet_v1": 0.922,
+  "dropnet": 0.984
+ },
+ "nothing fell": {
+  "n": 974,
+  "dropnet_v1": 0.0,
+  "dropnet": 0.0
+ },
+ "edge of the eye": {
+  "n": 309,
+  "dropnet_v1": 0.942,
+  "dropnet": 0.997
+ },
+ "lid margin / corner, runs in": {
+  "n": 411,
+  "dropnet_v1": 0.448,
+  "dropnet": 0.895
+ },
+ "note": "same 3000 simulated test clips, detected rate (cutoff 0.7) by where the drop landed. dropnet_v1 = before edge drops counted as in"
+}

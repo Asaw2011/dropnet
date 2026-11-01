@@ -3,6 +3,7 @@
 The clip camera sits next to the nozzle looking at the eye, so a drop shows up big near
 the frame edge, shrinks as it falls toward the eye, then either goes in (spreads into the
 tear film, often a blink) or misses (beads on the lid/cheek, maybe runs down).
+Landing on the lid edge or a corner and running in counts as in, most real drops land there.
 Labels: 0 = went in, 1 = missed, 2 = no drop came out.
 """
 import cv2
@@ -143,38 +144,130 @@ def _sample_point(region, rng):
     return float(xs[i]), float(ys[i])
 
 
+def _ell(r):
+    r = max(1, int(r))
+    return cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * r + 1, 2 * r + 1))
+
+
+def _zones(opening):
+    """band = lid margin + corners + lower lid, a drop there wicks in so it counts as in.
+    gap = too close to call, we never land a drop there. outside gap = a real miss"""
+    ys, xs = np.where(opening)
+    ew = xs.max() - xs.min() + 1
+    m = max(3, int(0.09 * ew))
+    g = max(3, int(0.12 * ew))
+    band = cv2.dilate(opening.astype(np.uint8), _ell(m)).astype(bool) & ~opening
+    # upper lid margin stays thin, a drop up on the lid mostly sits there
+    top = np.full(W, -1)
+    cols = np.where(opening.any(0))[0]
+    top[cols] = opening[:, cols].argmax(0)
+    yy = np.arange(H)[:, None]
+    band &= ~((top[None, :] >= 0) & (yy < top[None, :] - 2))
+    inzone = opening | band
+    gap = cv2.dilate(inzone.astype(np.uint8), _ell(g)).astype(bool)
+    # edges + corners of the opening, where most real drops actually land
+    ring = opening & ~cv2.erode(opening.astype(np.uint8), _ell(3)).astype(bool)
+    xx = np.arange(W)[None, :]
+    corners = opening & ((xx < xs.min() + 0.25 * ew) | (xx > xs.max() - 0.25 * ew))
+    return band, inzone, gap, ring | corners, ew
+
+
+def _props(base, keepout, rng):
+    """bottle tip + finger poking in from the edges. goes on every label so a hand alone means nothing"""
+    props = {}
+    if rng.random() < 0.5:
+        # nozzle at the top edge, either parked there (camera on the bottle) or sliding in (phone test)
+        nw, depth = rng.uniform(8, 22), rng.uniform(6, 20)
+        x = rng.uniform(0.2, 0.8) * W
+        slide = rng.random() < 0.5
+        tone = rng.uniform(205, 250)
+        props["nozzle"] = (x, nw, depth, slide, tone, rng.uniform(-6, 6))
+    if rng.random() < 0.4:
+        skin = base[~keepout] if (~keepout).sum() > 50 else base.reshape(-1, 3)
+        col = np.median(skin, 0) * rng.uniform(0.75, 1.1)
+        side = rng.integers(3)  # left, right, bottom
+        a, b = rng.uniform(14, 34), rng.uniform(8, 18)
+        props["finger"] = (side, a, b, col, rng.uniform(0, 12), rng.uniform(-30, 30))
+    return props
+
+
+def _nozzle_tip(props, t):
+    x, nw, depth, slide, tone, tilt = props["nozzle"]
+    d = depth * min(1.0, (t + 1) / 4) if slide else depth
+    return x + tilt * d / 20, d
+
+
+def _draw_props(f, props, keepout, t):
+    out = f.astype(np.float32)
+    if "nozzle" in props:
+        x, nw, depth, slide, tone, tilt = props["nozzle"]
+        tx, d = _nozzle_tip(props, t)
+        m = np.zeros((H, W), np.uint8)
+        pts = np.array([[x - nw, -2], [x + nw, -2], [tx + nw * 0.35, d], [tx - nw * 0.35, d]], np.int32)
+        cv2.fillConvexPoly(m, pts, 1)
+        a = cv2.GaussianBlur(m.astype(np.float32), (3, 3), 0)[..., None]
+        shade = tone - 25 * np.abs(np.arange(W)[None, :] - tx) / max(nw, 1)
+        out = out * (1 - a) + np.clip(shade, 150, 255)[..., None] * a
+    if "finger" in props:
+        side, a_, b_, col, push, ang = props["finger"]
+        p = push * t / (T - 1)
+        cx, cy = [(-a_ * 0.4 + p, H * 0.6), (W + a_ * 0.4 - p, H * 0.6), (W * 0.5, H + b_ * 0.3 - p)][side]
+        m = np.zeros((H, W), np.uint8)
+        cv2.ellipse(m, (int(cx), int(cy)), (int(a_), int(b_)), ang, 0, 360, 1, -1)
+        m = m.astype(bool) & ~keepout
+        a = cv2.GaussianBlur(m.astype(np.float32), (5, 5), 0)[..., None]
+        out = out * (1 - a) + col[None, None, :] * a
+    return out.clip(0, 255).astype(np.uint8)
+
+
 def make_clip(img, mask, label, rng):
     base, opening = augment_base(img, mask, rng)
     if opening.sum() < 40:  # eye cropped away, just call it no drop
         label = NO_DROP
+        band = inzone = gap = edge = np.zeros((H, W), bool)
+    else:
+        band, inzone, gap, edge, ew = _zones(opening)
+    keepout = cv2.dilate(inzone.astype(np.uint8), _ell(2)).astype(bool) | opening
+    props = _props(base, keepout, rng)
 
     t_imp = int(rng.integers(4, 8))
     fall = int(rng.integers(2, 5))
     drop_style = (rng.uniform(-0.45, -0.15), rng.uniform(-0.45, -0.15), rng.uniform(0.3, 0.7), rng.uniform(60, 160))
     r_imp = rng.uniform(2.5, 5.5)
     r0 = rng.uniform(10, 22)
-    # drop enters from where the nozzle is, mostly top side of frame
+    # drop comes off the nozzle, mostly top side of frame
     start = (rng.uniform(0.15, 0.85) * W, rng.uniform(-0.25, 0.25) * H)
+    if "nozzle" in props:
+        start = _nozzle_tip(props, max(0, t_imp - fall))
 
     blink = lambda t: 0.0
     closed_hit = False
     run_down = False
     overflow = False
     hang = False
+    wick = None  # (frames it sits on the lid edge, where it gets pulled in)
     target = None
 
     eye_dil = cv2.dilate(opening.astype(np.uint8), np.ones((3, 3), np.uint8)).astype(bool)
     if label == IN_EYE:
-        # aim mostly at the lower half, that's where drops pool
-        ys, xs = np.where(opening)
-        lower = opening & (np.arange(H)[:, None] > ys.mean() - 2)
-        target = _sample_point(lower if lower.sum() > 10 and rng.random() < 0.7 else opening, rng)
+        r = rng.random()
+        if r < 0.3:
+            target = _sample_point(opening, rng)
+        elif r < 0.6:
+            target = _sample_point(edge, rng)
+        else:
+            # lands on the lid margin / corner / lower lid and runs in
+            target = _sample_point(band, rng)
+            if target is not None:
+                ys, xs = np.where(opening)
+                j = np.argmin((xs - target[0]) ** 2 + (ys - target[1]) ** 2)
+                wick = (int(rng.integers(0, 3)), (float(xs[j]), float(ys[j])))
         if rng.random() < 0.6:
             blink = _blink_curve(t_imp + rng.integers(1, 3), rng.integers(3, 6))
         overflow = rng.random() < 0.25
     elif label == MISSED:
-        skin = ~cv2.dilate(opening.astype(np.uint8), np.ones((5, 5), np.uint8)).astype(bool)
-        near = skin & cv2.dilate(opening.astype(np.uint8), np.ones((21, 21), np.uint8)).astype(bool)
+        skin = ~gap
+        near = skin & cv2.dilate(opening.astype(np.uint8), _ell(max(6, 0.5 * ew))).astype(bool)
         mode = rng.random()
         if mode < 0.15:
             # eye shut right as the drop lands, it hits the lid
@@ -225,42 +318,59 @@ def make_clip(img, mask, label, rng):
             elif t >= t_imp:
                 k = t - t_imp
                 if label == IN_EYE:
-                    # splash then spread into the tear film
-                    if k == 0:
-                        f = _drop(f, tx, ty, r_imp * 1.3, drop_style, flat=0.6)
-                    rr = int(r_imp * (1.5 + 0.8 * k))
-                    disk = np.zeros((H, W), np.uint8)
-                    cv2.circle(disk, (int(tx), int(ty)), rr, 1, -1)
-                    wet_eye |= disk.astype(bool) & eye_dil
-                    if k >= 1:
-                        # meniscus at the lower lid lights up
-                        lower_edge = opening & ~np.roll(opening, -2, axis=0)
-                        f = _wet(f, lower_edge, min(1.0, 0.4 * k), rng, n_spec=2)
-                    if overflow and k >= 2:
-                        if bead is None:
-                            ys, xs = np.where(opening)
-                            col = xs[(ys == ys.max())][0] if len(xs) else tx
-                            bead = [float(col), float(ys.max() + 2)]
-                        bead[1] += rng.uniform(1, 3)
-                        trail[int(min(bead[1], H - 1)), int(bead[0])] = True
-                        trail = cv2.dilate(trail.astype(np.uint8), np.ones((2, 2), np.uint8)).astype(bool) & ~opening
-                        f = _drop(f, bead[0], bead[1], r_imp * 0.7, drop_style, flat=0.8)
+                    ix, iy, k_in = tx, ty, k
+                    if wick is not None:
+                        sit, (ex, ey) = wick
+                        k_in = k - sit - 2
+                        if k_in < 0:
+                            # beads on the lid edge, then gets pulled into the eye
+                            u = 0.0 if k < sit else (k - sit + 1) / 3
+                            bx, by = tx + (ex - tx) * u, ty + (ey - ty) * u
+                            if u > 0:
+                                trail[int(np.clip(by, 0, H - 1)), int(np.clip(bx, 0, W - 1))] = True
+                                trail = cv2.dilate(trail.astype(np.uint8), np.ones((2, 2), np.uint8)).astype(bool)
+                            f = _drop(f, bx, by, r_imp * (1.3 if k == 0 else 1.1 - 0.3 * u), drop_style, flat=0.75)
+                        ix, iy = ex, ey
+                    if k_in >= 0:
+                        # splash then spread into the tear film
+                        if k_in == 0 and wick is None:
+                            f = _drop(f, ix, iy, r_imp * 1.3, drop_style, flat=0.6)
+                        rr = int(r_imp * (1.5 + 0.8 * k_in))
+                        disk = np.zeros((H, W), np.uint8)
+                        cv2.circle(disk, (int(ix), int(iy)), rr, 1, -1)
+                        wet_eye |= disk.astype(bool) & eye_dil
+                        if k_in >= 1:
+                            # meniscus at the lower lid lights up
+                            lower_edge = opening & ~np.roll(opening, -2, axis=0)
+                            f = _wet(f, lower_edge, min(1.0, 0.4 * k_in), rng, n_spec=2)
+                        if overflow and k_in >= 2:
+                            if bead is None:
+                                ys, xs = np.where(opening)
+                                col = xs[(ys == ys.max())][0] if len(xs) else ix
+                                bead = [float(col), float(ys.max() + 2)]
+                            bead[1] += rng.uniform(1, 3)
+                            trail[int(min(bead[1], H - 1)), int(bead[0])] = True
+                            trail = cv2.dilate(trail.astype(np.uint8), np.ones((2, 2), np.uint8)).astype(bool) & ~opening
+                            f = _drop(f, bead[0], bead[1], r_imp * 0.7, drop_style, flat=0.8)
                 else:
                     if bead is None:
                         bead = [tx, ty]
                     elif run_down:
                         nx = bead[0] + rng.uniform(-0.5, 0.5)
                         ny = bead[1] + rng.uniform(0.8, 3.0)
-                        # don't let it roll into the eye, that'd be a different label
-                        if not (0 <= int(ny) < H and eye_dil[int(ny), int(np.clip(nx, 0, W - 1))]):
+                        # don't let it roll toward the eye, that'd be a different label
+                        if not (0 <= int(ny) < H and gap[int(ny), int(np.clip(nx, 0, W - 1))]):
                             if 0 <= int(ny) < H:
                                 trail[int(ny), int(np.clip(nx, 0, W - 1))] = True
                             bead = [nx, ny]
                     trail = cv2.dilate(trail.astype(np.uint8), np.ones((2, 2), np.uint8)).astype(bool)
                     f = _drop(f, bead[0], bead[1], r_imp * (1.4 if k == 0 else 1.1), drop_style, flat=0.75)
         elif hang:
-            f = _drop(f, start[0], max(start[1], 2), r0 * 0.8, drop_style, blur=2.0)
+            hx, hy = _nozzle_tip(props, t) if "nozzle" in props else (start[0], max(start[1], 2))
+            f = _drop(f, hx, hy, r0 * 0.8, drop_style, blur=2.0)
 
+        if props:
+            f = _draw_props(f, props, keepout, t)
         # handheld shake, flicker, sensor noise
         M = np.float32([[1, 0, shake[t, 0]], [0, 1, shake[t, 1]]])
         f = cv2.warpAffine(f, M, (W, H), borderMode=cv2.BORDER_REPLICATE).astype(np.float32)

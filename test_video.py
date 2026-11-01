@@ -2,6 +2,7 @@
 
   python test_video.py videos/*.mov
   python test_video.py clip.mov --crop 0.2,0.3,0.5,0.4    # x,y,w,h as fractions of the frame
+  python test_video.py clip.mov --eye 1.2,0.4,0.3,0.1,0.05 # box the eye at 1.2s, it gets tracked
 
 Name files by what really happened and it'll score itself:
   in_*.mov    drop went in
@@ -36,10 +37,59 @@ MODEL_FPS = 60
 TRUTH = {"in": "went in", "miss": "missed", "none": "nothing fell"}
 
 
-def read_video(path, crop):
+EYE_CONTEXT = 2.0  # crop width = eye width * this, matches the training crops after zoom
+
+
+def track_eye(path, eye, step):
+    """follow a box drawn around the eye (t, x, y, w, h as fractions) with template matching.
+    returns an eye center (fractions) for every kept frame"""
+    t0, bx, by, bw, bh = eye
+    cap = cv2.VideoCapture(path)
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30
+    grays, i = [], 0
+    while True:
+        ok, f = cap.read()
+        if not ok:
+            break
+        i += 1
+        if (i - 1) % step:
+            continue
+        s = 360 / f.shape[1]
+        grays.append(cv2.cvtColor(cv2.resize(f, None, fx=s, fy=s, interpolation=cv2.INTER_AREA), cv2.COLOR_BGR2GRAY))
+    if not grays:
+        return []
+    h, w = grays[0].shape
+    k0 = int(np.clip(round(t0 * fps / step), 0, len(grays) - 1))
+    pw, ph = max(8, int(bw * w)), max(6, int(bh * h))
+    x0, y0 = int(np.clip(bx * w, 0, w - pw)), int(np.clip(by * h, 0, h - ph))
+    tmpl = grays[k0][y0:y0 + ph, x0:x0 + pw]
+    pos = {k0: (x0, y0)}
+    for rng_ in (range(k0 + 1, len(grays)), range(k0 - 1, -1, -1)):
+        px, py = x0, y0
+        for k in rng_:
+            # search near where it was last frame, hand covering the eye just means keep the old spot
+            m = max(pw, ph) // 2
+            sx0, sy0 = max(0, px - m), max(0, py - m)
+            sx1, sy1 = min(w, px + pw + m), min(h, py + ph + m)
+            area = grays[k][sy0:sy1, sx0:sx1]
+            if area.shape[0] >= ph and area.shape[1] >= pw:
+                r = cv2.matchTemplate(area, tmpl, cv2.TM_CCOEFF_NORMED)
+                _, v, _, loc = cv2.minMaxLoc(r)
+                if v > 0.45:
+                    px, py = sx0 + loc[0], sy0 + loc[1]
+            pos[k] = (px, py)
+    c = np.array([[(pos[k][0] + pw / 2) / w, (pos[k][1] + ph / 2) / h] for k in range(len(grays))])
+    # smooth out jitter
+    kern = np.ones(5) / 5
+    c = np.stack([np.convolve(np.pad(c[:, j], 2, mode="edge"), kern, "valid") for j in range(2)], 1)
+    return c
+
+
+def read_video(path, crop, eye=None):
     cap = cv2.VideoCapture(path)
     fps = cap.get(cv2.CAP_PROP_FPS) or 30
     step = max(1, round(fps / MODEL_FPS))  # 240fps slo-mo -> keep every 4th
+    centers = track_eye(path, eye, step) if eye else None
     small, full, i = [], [], 0
     while True:
         ok, f = cap.read()
@@ -49,7 +99,18 @@ def read_video(path, crop):
         if (i - 1) % step:
             continue
         h, w = f.shape[:2]
-        if crop:
+        if centers is not None and len(small) < len(centers):
+            cx, cy = centers[len(small)]
+            cw = int(eye[3] * w * EYE_CONTEXT)
+            ch = int(cw * H / W)
+            x0, y0 = int(cx * w - cw / 2), int(cy * h - ch / 2)
+            pad = max(0, -x0, -y0, x0 + cw - w, y0 + ch - h)
+            if pad:
+                f = cv2.copyMakeBorder(f, pad, pad, pad, pad, cv2.BORDER_REPLICATE)
+                x0, y0 = x0 + pad, y0 + pad
+            f = f[y0:y0 + ch, x0:x0 + cw]
+            h, w = f.shape[:2]
+        elif crop:
             x, y, cw, ch = crop
             f = f[int(y * h):int((y + ch) * h), int(x * w):int((x + cw) * w)]
             h, w = f.shape[:2]
@@ -121,15 +182,17 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("videos", nargs="+")
     ap.add_argument("--crop", help="x,y,w,h as fractions, to zoom in on the eye")
+    ap.add_argument("--eye", help="t,x,y,w,h: box around the eye (corner to corner) at t seconds, gets tracked")
     a = ap.parse_args()
     crop = [float(v) for v in a.crop.split(",")] if a.crop else None
+    eye = [float(v) for v in a.eye.split(",")] if a.eye else None
     sess = ort.InferenceSession(f"{ROOT}/runs/dropnet.onnx", providers=["CPUExecutionProvider"])
     os.makedirs(OUT, exist_ok=True)
 
     rows = []
     for path in a.videos:
         name = os.path.splitext(os.path.basename(path))[0]
-        frames, full, fps = read_video(path, crop)
+        frames, full, fps = read_video(path, crop, eye)
         p, starts = score(sess, frames)
         if len(p) == 0:
             print(f"{name}: too short, need at least {T} frames at ~{MODEL_FPS} fps")

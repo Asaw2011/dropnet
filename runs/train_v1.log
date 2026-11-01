@@ -1,0 +1,38 @@
+{'train': 4489, 'val': 560, 'test': 566} eye crops device mps
+ep 1 loss 1.012 val acc3 0.751 bin 0.790 false-credit 0.385 (270s)
+ep 2 loss 0.373 val acc3 0.953 bin 0.970 false-credit 0.029 (254s)
+ep 3 loss 0.282 val acc3 0.975 bin 0.986 false-credit 0.015 (331s)
+ep 4 loss 0.256 val acc3 0.983 bin 0.992 false-credit 0.010 (267s)
+ep 5 loss 0.243 val acc3 0.983 bin 0.987 false-credit 0.010 (286s)
+ep 6 loss 0.241 val acc3 0.984 bin 0.988 false-credit 0.010 (244s)
+ep 7 loss 0.225 val acc3 0.985 bin 0.990 false-credit 0.008 (240s)
+ep 8 loss 0.221 val acc3 0.991 bin 0.994 false-credit 0.010 (240s)
+ep 9 loss 0.216 val acc3 0.991 bin 0.993 false-credit 0.010 (267s)
+ep 10 loss 0.213 val acc3 0.991 bin 0.993 false-credit 0.006 (273s)
+ep 11 loss 0.211 val acc3 0.993 bin 0.995 false-credit 0.008 (265s)
+ep 12 loss 0.211 val acc3 0.993 bin 0.995 false-credit 0.008 (278s)
+TEST {
+ "acc3": 0.9913333333333333,
+ "acc_binary": 0.9943333333333333,
+ "sensitivity_went_in": 0.9903753609239654,
+ "specificity_not_in": 0.9964303926568078,
+ "false_credit_on_miss": 0.0070921985815602835,
+ "confusion_rows_true_cols_pred": [
+  [
+   1029,
+   10,
+   0
+  ],
+  [
+   7,
+   971,
+   9
+  ],
+  [
+   0,
+   0,
+   974
+  ]
+ ],
+ "note": "synthetic clips on held-out faces, NOT real drops"
+}

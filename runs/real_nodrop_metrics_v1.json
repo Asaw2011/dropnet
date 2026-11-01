@@ -1,0 +1,65 @@
+{
+ "per_video": {
+  "12041905.mp4": {
+   "windows": 42,
+   "frac_detected": 0.0
+  },
+  "12271148.mp4": {
+   "windows": 50,
+   "frac_detected": 0.0
+  },
+  "18622568.mp4": {
+   "windows": 147,
+   "frac_detected": 0.0
+  },
+  "20042306.mp4": {
+   "windows": 49,
+   "frac_detected": 0.0
+  },
+  "30643794.mp4": {
+   "windows": 104,
+   "frac_detected": 0.0
+  },
+  "36079579.mp4": {
+   "windows": 272,
+   "frac_detected": 0.0
+  },
+  "5944680.mp4": {
+   "windows": 47,
+   "frac_detected": 0.0
+  },
+  "5995137.mp4": {
+   "windows": 152,
+   "frac_detected": 0.0
+  },
+  "7298045.mp4": {
+   "windows": 89,
+   "frac_detected": 0.0
+  },
+  "7298092.mp4": {
+   "windows": 101,
+   "frac_detected": 0.0
+  },
+  "7298096.mp4": {
+   "windows": 149,
+   "frac_detected": 0.0
+  },
+  "7299471.mp4": {
+   "windows": 77,
+   "frac_detected": 0.0
+  },
+  "7299501.mp4": {
+   "windows": 67,
+   "frac_detected": 0.0
+  },
+  "7580478.mp4": {
+   "windows": 65,
+   "frac_detected": 0.0
+  }
+ },
+ "summary": {
+  "windows": 1411,
+  "frac_detected": 0.0,
+  "note": "real footage, no drop in any window, so frac_detected = false credit rate"
+ }
+}
